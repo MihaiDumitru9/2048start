@@ -8,6 +8,7 @@
 #define wWidth 1600
 #define wHeight 720
 
+
 int initSDL(SDL_Window **window, SDL_Renderer **renderer, TTF_Font **font) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         printf("Eroare la inițializarea SDL: %s\n", SDL_GetError());
