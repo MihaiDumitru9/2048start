@@ -1,14 +1,20 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_image.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "render.h"
+#include "render.h" 
+#include "logic.h"
 
-#define wWidth 1600
-#define wHeight 720
+
 
 int initSDL(SDL_Window **window, SDL_Renderer **renderer, TTF_Font **font) {
+    if (IMG_Init(IMG_INIT_PNG) == 0) {
+        printf("SDL_image failed to initialize: %s\n", IMG_GetError());
+        return -1;
+    }
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         printf("Eroare la inițializarea SDL: %s\n", SDL_GetError());
         return -1;
@@ -16,22 +22,35 @@ int initSDL(SDL_Window **window, SDL_Renderer **renderer, TTF_Font **font) {
 
     if (TTF_Init() != 0) {
         printf("Eroare la inițializarea SDL_ttf: %s\n", TTF_GetError());
-        SDL_Quit();  
+        SDL_Quit();
         return -1;
     }
 
     *window = SDL_CreateWindow("2048 Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, wWidth, wHeight, SDL_WINDOW_SHOWN);
-    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED);
+    if (!*window) {
+        printf("Failed to create window: %s\n", SDL_GetError());
+        TTF_Quit();
+        SDL_Quit();
+        return -1;
+    }
 
-    *font = TTF_OpenFont("font1.ttf", 24); 
+    *renderer = SDL_CreateRenderer(*window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!*renderer) {
+        printf("Failed to create renderer: %s\n", SDL_GetError());
+        SDL_DestroyWindow(*window);
+        TTF_Quit();
+        SDL_Quit();
+        return -1;
+    }
 
+    *font = TTF_OpenFont("font4.ttf", 30);
     if (*font == NULL) {
         printf("Eroare la încărcarea fontului: %s\n", TTF_GetError());
         SDL_DestroyRenderer(*renderer);
         SDL_DestroyWindow(*window);
         TTF_Quit();
-        SDL_Quit();  
-        return -1;  
+        SDL_Quit();
+        return -1;
     }
 
     return 0;
@@ -40,35 +59,25 @@ int initSDL(SDL_Window **window, SDL_Renderer **renderer, TTF_Font **font) {
 int handleEvents(SDL_Event *event, int *selectedOption, int *running) {
     while (SDL_PollEvent(event)) {
         if (event->type == SDL_QUIT) {
+            *running = 0;
             return 0;
         } else if (event->type == SDL_KEYDOWN) {
-            if (event->key.keysym.sym == SDLK_q) {
-                return 0;
-            } else if (event->key.keysym.sym == SDLK_UP) {
-                if (*selectedOption > 0) {
-                    *selectedOption = *selectedOption - 1;
-                } else {
-                    *selectedOption = 0;
-                }
-            } else if (event->key.keysym.sym == SDLK_DOWN) {
-                if (*selectedOption < 3) {
-                    *selectedOption = *selectedOption + 1;
-                } else {
-                    *selectedOption = 3;
-                }
-            } else if (event->key.keysym.sym == SDLK_RETURN) {
-                if (*selectedOption == 0) {
-                    return 1;
-                }
-                else if (*selectedOption == 1) {
-                    return 2;
-                }
-                else if (*selectedOption == 2) {
-                    return 3;
-                }
-                else if (*selectedOption == 3) {
-                    return 4;
-                }
+            switch (event->key.keysym.sym) {
+                case SDLK_q:
+                    *running = 0;
+                    return 0;
+                case SDLK_UP:
+                    if (*selectedOption > 0)
+                        (*selectedOption)--;
+                    break;
+                case SDLK_DOWN:
+                    if (*selectedOption < 3)
+                        (*selectedOption)++;
+                    break;
+                case SDLK_RETURN:
+                    return *selectedOption + 1;
+                default:
+                    break;
             }
         }
     }
@@ -76,7 +85,7 @@ int handleEvents(SDL_Event *event, int *selectedOption, int *running) {
 }
 
 int main() {
-    srand(time(NULL));  
+    srand(time(NULL));
 
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
@@ -85,7 +94,7 @@ int main() {
     SDL_Renderer *gameRenderer = NULL;
 
     if (initSDL(&window, &renderer, &font) != 0) {
-        return -1;  
+        return -1;
     }
 
     int running = 1;
@@ -93,37 +102,31 @@ int main() {
     SDL_Event event;
 
     while (running) {
-        int menuState = handleEvents(&event, &selectedOption, &running);  
+        int menuState = handleEvents(&event, &selectedOption, &running);
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);  
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
 
         if (menuState == -1) {
             drawMenu(renderer, font, selectedOption);
         } else {
-            if (menuState == 1) {
-                printf("Start Classic Game\n");
-                startGame(&gameWindow, &gameRenderer);
-            } else if(menuState == 2) {
-                printf("Start 2x2 Game\n");
-                startGame(&gameWindow, &gameRenderer);
-            } else if(menuState == 3) {
-                printf("Start 3x3 Game\n");
-                startGame(&gameWindow, &gameRenderer);
-            } else if(menuState == 4) {
-                printf("Start Multiplayer Game\n");
-                startGame(&gameWindow, &gameRenderer);
+            if (menuState >= 1 && menuState <= 3) {
+                int gridSize = 3 + (menuState - 1);
+                printf("Starting Game with grid size %dx%d\n", gridSize, gridSize);
+                startGame(&gameWindow, &gameRenderer, gridSize);
+            } else if (menuState == 4) {
+                printf("Starting Multiplayer Game\n");
+                runMultiplayerGame(window, renderer, font);
             } else {
-                printf("Exit\n");
                 running = 0;
             }
         }
 
-        drawText(renderer, font, "Press q to exit", 100, 100);
-
+        drawText(renderer, font, "Press q to exit", 0, 100);
         SDL_RenderPresent(renderer);
+        SDL_Delay(16);
     }
 
-    cleanup(window, renderer, font);  
+    cleanup(window, renderer, font);
     return 0;
 }
